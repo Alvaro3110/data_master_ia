@@ -12,12 +12,18 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1 import health, ask_analytics, search_rules, traces, workspaces
 from app.config import settings
+from app.db.session import init_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     print(f"🚀 Agentic Analytics API starting — env={settings.APP_ENV}")
+    try:
+        init_db()
+        print("✅ Database schemas initialized successfully")
+    except Exception as e:
+        print(f"❌ Error initializing database schemas: {e}")
     yield
     print("🛑 API shutting down")
 

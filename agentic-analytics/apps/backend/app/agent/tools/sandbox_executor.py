@@ -8,12 +8,14 @@ Executa código Python em ambiente isolado com:
 """
 from __future__ import annotations
 
+import abc
 import asyncio
+import base64
+import os
 import re
 import subprocess
 import sys
 import tempfile
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -70,7 +72,7 @@ class SandboxResult:
     stderr: str = ""
     timed_out: bool = False
     error: Optional[str] = None
-    artifacts: list[str] = field(default_factory=list)
+    artifacts: list[dict] = field(default_factory=list)
 
 
 def _apply_redaction(text: str) -> str:
@@ -80,14 +82,16 @@ def _apply_redaction(text: str) -> str:
     return text
 
 
-class SandboxExecutor:
-    """
-    Executa código Python em subprocess isolado.
-    Aplica redaction de segredos e bloqueia variáveis de ambiente sensíveis.
-    Impõe timeout configurável.
-    """
-
+class BaseSandboxExecutor(abc.ABC):
     DEFAULT_TIMEOUT = 30
+
+    @abc.abstractmethod
+    async def execute(
+        self,
+        code: str,
+        timeout_seconds: int = DEFAULT_TIMEOUT,
+    ) -> SandboxResult:
+        pass
 
     def _build_safe_code(self, code: str) -> str:
         """Injeta o preamble de segurança antes do código do usuário."""
@@ -95,70 +99,97 @@ class SandboxExecutor:
         preamble = _SANDBOX_PREAMBLE.format(blocked=blocked_set)
         return preamble + "\n" + code
 
+
+class LocalSandboxExecutor(BaseSandboxExecutor):
+    """
+    Executa código Python em subprocess isolado localmente.
+    Usa um diretório temporário para capturar artefatos (ex: arquivos salvos pelo código).
+    """
+
     async def execute(
         self,
         code: str,
-        timeout_seconds: int = DEFAULT_TIMEOUT,
+        timeout_seconds: int = BaseSandboxExecutor.DEFAULT_TIMEOUT,
     ) -> SandboxResult:
-        """
-        Executa código Python em subprocess com timeout e redaction.
-
-        Args:
-            code: Código Python a executar.
-            timeout_seconds: Limite de tempo em segundos.
-
-        Returns:
-            SandboxResult com stdout, stderr, success e timed_out.
-        """
         safe_code = self._build_safe_code(code)
 
-        # Cria arquivo temporário com o código
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False, encoding="utf-8"
-        ) as f:
-            f.write(safe_code)
-            tmp_path = f.name
-
-        try:
-            # Ambiente limpo — remove variáveis sensíveis do processo filho
-            clean_env = {k: v for k, v in os.environ.items() if k not in _BLOCKED_ENV_VARS}
-
-            proc = await asyncio.create_subprocess_exec(
-                sys.executable,
-                tmp_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=clean_env,
-            )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            script_path = tmp_path / "script.py"
+            script_path.write_text(safe_code, encoding="utf-8")
 
             try:
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                    proc.communicate(), timeout=timeout_seconds
-                )
-                stdout = _apply_redaction(stdout_bytes.decode("utf-8", errors="replace"))
-                stderr = _apply_redaction(stderr_bytes.decode("utf-8", errors="replace"))
-                success = proc.returncode == 0
-                return SandboxResult(
-                    success=success,
-                    stdout=stdout,
-                    stderr=stderr,
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                return SandboxResult(
-                    success=False,
-                    stdout="",
-                    stderr="Execução cancelada por timeout.",
-                    timed_out=True,
-                    error=f"Timeout após {timeout_seconds}s",
+                # Ambiente limpo — remove variáveis sensíveis
+                clean_env = {k: v for k, v in os.environ.items() if k not in _BLOCKED_ENV_VARS}
+                
+                # Definir o CWD do script como o tmpdir para que arquivos fiquem lá
+                proc = await asyncio.create_subprocess_exec(
+                    sys.executable,
+                    str(script_path),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=clean_env,
+                    cwd=str(tmp_path),
                 )
 
-        except Exception as e:
-            return SandboxResult(
-                success=False,
-                stderr=str(e),
-                error=str(e),
-            )
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
+                try:
+                    stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                        proc.communicate(), timeout=timeout_seconds
+                    )
+                    stdout = _apply_redaction(stdout_bytes.decode("utf-8", errors="replace"))
+                    stderr = _apply_redaction(stderr_bytes.decode("utf-8", errors="replace"))
+                    success = proc.returncode == 0
+                    
+                    artifacts = self._extract_artifacts(tmp_path)
+                    
+                    return SandboxResult(
+                        success=success,
+                        stdout=stdout,
+                        stderr=stderr,
+                        artifacts=artifacts,
+                    )
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+                    return SandboxResult(
+                        success=False,
+                        stdout="",
+                        stderr="Execução cancelada por timeout.",
+                        timed_out=True,
+                        error=f"Timeout após {timeout_seconds}s",
+                    )
+            except Exception as e:
+                return SandboxResult(
+                    success=False,
+                    stderr=str(e),
+                    error=str(e),
+                )
+
+    def _extract_artifacts(self, directory: Path) -> list[dict]:
+        """Extrai os arquivos criados no diretório como artefatos base64 ou texto."""
+        artifacts = []
+        for file_path in directory.iterdir():
+            if file_path.is_file() and file_path.name != "script.py":
+                ext = file_path.suffix.lower()
+                if ext in [".png", ".jpg", ".jpeg", ".webp"]:
+                    b64 = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+                    artifacts.append({
+                        "tipo": "image",
+                        "titulo": file_path.name,
+                        "conteudo": f"data:image/{ext[1:]};base64,{b64}",
+                        "metadata": {"filename": file_path.name}
+                    })
+                elif ext in [".json", ".csv", ".txt", ".md"]:
+                    artifacts.append({
+                        "tipo": "markdown" if ext == ".md" else "json" if ext == ".json" else "text",
+                        "titulo": file_path.name,
+                        "conteudo": file_path.read_text(encoding="utf-8"),
+                        "metadata": {"filename": file_path.name}
+                    })
+        return artifacts
+
+
+# Factory de exportação retro-compatível (usa Local por padrão no MVP)
+def SandboxExecutor() -> BaseSandboxExecutor:
+    return LocalSandboxExecutor()
+

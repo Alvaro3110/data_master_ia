@@ -16,10 +16,7 @@ dependencies = [
     "langchain>=0.2.0",
     "langchain-community>=0.2.0",
     "langchain-openai>=0.1.0",
-
-    # Text2SQL
-    "text2sql>=0.1.0",
-    "text2sql[anthropic]>=0.1.0",
+    "openai>=1.0.0",
 
     # OpenSearch
     "opensearch-py>=2.6.0",
@@ -47,6 +44,9 @@ dependencies = [
     "rich>=13.7.0",
     "tenacity>=8.3.0",
 
+    # Redis
+    "redis>=5.0.0",
+
     # SQL Parsing
     "sqlglot>=23.0.0",
 ]
@@ -65,6 +65,7 @@ dev = [
     "mypy>=1.10.0",
     "requests-mock>=1.12.1",
     "vcrpy>=6.0.1",
+    "openai-responses>=0.4.0",
 ]
 
 [build-system]

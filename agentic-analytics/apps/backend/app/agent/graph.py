@@ -402,3 +402,109 @@ async def run_analytics(
         "artifacts": final_state.get("artifacts", []),
         "specialist_messages": final_state.get("specialist_messages", []),
     }
+
+
+async def run_analytics_stream(
+    question: str,
+    trace_id: str,
+    config: dict | None = None,
+) -> None:
+    """Runs the graph, streaming steps and answer chunks to Redis."""
+    import asyncio
+    from app.services.redis_client import redis_mgr
+
+    graph_config = {
+        "configurable": {
+            "max_retrieval_attempts": settings.MAX_RETRIEVAL_ATTEMPTS,
+            "guardrail_threshold": settings.GUARDRAIL_THRESHOLD,
+            "model": settings.OLLAMA_MODEL,
+            "temperature": 0.0,
+            "top_k": 3,
+            **(config or {}),
+        }
+    }
+
+    initial_state: AgentState = {
+        "question": question,
+        "trace_id": trace_id,
+        "guardrail": None,
+        "intent": None,
+        "rag_context": None,
+        "rag_sources": [],
+        "sql_plan": None,
+        "sql_result": None,
+        "answer": None,
+        "reasoning_steps": [],
+        "retrieval_attempts": 0,
+        "rewritten_query": None,
+        "masked_fields": [],
+        "routed_path": None,
+        "sandbox_result": None,
+        "artifacts": [],
+        "swarm_route": None,
+        "specialist_messages": [],
+    }
+
+    graph = get_graph()
+
+    await redis_mgr.add_event(trace_id, "start", {"question": question})
+
+    final_state = initial_state.copy()
+
+    try:
+        async for event in graph.astream(initial_state, config=graph_config):
+            for node_name, output in event.items():
+                for key, val in output.items():
+                    if isinstance(val, list) and key in final_state and isinstance(final_state[key], list):
+                        merged = list(final_state[key])
+                        for item in val:
+                            if item not in merged:
+                                merged.append(item)
+                        final_state[key] = merged
+                    else:
+                        final_state[key] = val
+
+                steps = output.get("reasoning_steps", [])
+                new_step = steps[-1] if steps else f"Executed {node_name}"
+
+                await redis_mgr.add_event(trace_id, "step", {
+                    "node": node_name,
+                    "reasoning_step": new_step,
+                    "sql": output.get("sql_plan") or final_state.get("sql_plan"),
+                    "sql_result": output.get("sql_result") or final_state.get("sql_result"),
+                    "routed_path": output.get("routed_path") or final_state.get("routed_path"),
+                })
+
+        answer = final_state.get("answer") or "Não foi possível gerar uma resposta."
+
+        # Simular streaming chunk-by-chunk para resposta final do assistente
+        words = answer.split(" ")
+        for i, word in enumerate(words):
+            chunk = word if i == 0 else " " + word
+            await redis_mgr.add_event(trace_id, "chunk", {"text": chunk})
+            await asyncio.sleep(0.015)
+
+        # Emitir evento final contendo resposta completa
+        final_payload = {
+            "trace_id": trace_id,
+            "question": question,
+            "answer": answer,
+            "routed_path": final_state.get("routed_path", "unknown"),
+            "reasoning_steps": final_state.get("reasoning_steps", []),
+            "retrieval_attempts": final_state.get("retrieval_attempts", 0),
+            "rewritten_query": final_state.get("rewritten_query"),
+            "sources": final_state.get("rag_sources", []),
+            "sql": final_state.get("sql_plan"),
+            "sql_result": final_state.get("sql_result"),
+            "masked_fields": final_state.get("masked_fields", []),
+            "artifacts": final_state.get("artifacts", []),
+            "sandbox_result": final_state.get("sandbox_result"),
+            "specialist_messages": final_state.get("specialist_messages", []),
+            "status": "success",
+        }
+        await redis_mgr.add_event(trace_id, "done", final_payload)
+
+    except Exception as e:
+        await redis_mgr.add_event(trace_id, "error", {"detail": str(e)})
+        raise e
+

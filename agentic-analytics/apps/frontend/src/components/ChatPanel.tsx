@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useCallback, KeyboardEvent } from "react";
+import { useState, useRef, useCallback, useEffect, KeyboardEvent } from "react";
 import { SQLViewer } from "./SQLViewer";
 import { SourcesPanel } from "./SourcesPanel";
 import { TracePanel } from "./TracePanel";
@@ -38,11 +38,87 @@ export function ChatPanel({ apiUrl, workspaceId }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  // Limpa conexões pendentes no unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
+
+  // Carrega threads e histórico quando muda o workspace
+  useEffect(() => {
+    if (!workspaceId) {
+      setActiveThreadId(null);
+      setMessages([]);
+      return;
+    }
+
+    const loadWorkspaceThread = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/v1/workspaces/${workspaceId}/threads`);
+        if (!res.ok) throw new Error("Erro ao carregar threads");
+        const threads = await res.json();
+
+        let threadId = "";
+        let historicalMessages: Message[] = [];
+
+        if (threads.length > 0) {
+          const thread = threads[0];
+          threadId = thread.id;
+          historicalMessages = (thread.mensagens || []).map((m: any, idx: number) => {
+            const meta = m.metadata || {};
+            return {
+              id: `${threadId}-msg-${idx}`,
+              role: m.role,
+              content: m.content,
+              trace: {
+                trace_id: meta.trace_id,
+                reasoning_steps: meta.specialist_messages ? [] : [],
+                routed_path: meta.routed_path || "unknown",
+              },
+              sql: meta.sql || null,
+              sqlResult: meta.sql_result || null,
+              sources: meta.sources || [],
+              maskedFields: meta.masked_fields || [],
+              artifacts: meta.artifacts || [],
+              sandboxResult: meta.sandbox_result || null,
+              specialistMessages: meta.specialist_messages || [],
+              routedPath: meta.routed_path || null,
+            };
+          });
+        } else {
+          // Cria uma thread nova padrão caso não exista
+          const createRes = await fetch(`${apiUrl}/api/v1/workspaces/${workspaceId}/threads`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ titulo: "Análise Principal" }),
+          });
+          if (createRes.ok) {
+            const newThread = await createRes.json();
+            threadId = newThread.id;
+          }
+        }
+
+        setActiveThreadId(threadId);
+        setMessages(historicalMessages);
+        setTimeout(scrollToBottom, 100);
+      } catch (err) {
+        console.error("Falha ao carregar contexto de thread:", err);
+      }
+    };
+
+    loadWorkspaceThread();
+  }, [workspaceId, apiUrl]);
 
   const sendMessage = useCallback(
     async (question: string) => {
@@ -58,57 +134,169 @@ export function ChatPanel({ apiUrl, workspaceId }: ChatPanelProps) {
       setInput("");
       setLoading(true);
 
+      let traceId = "";
       try {
-        const res = await fetch(`${apiUrl}/api/v1/ask-analytics`, {
+        const initRes = await fetch(`${apiUrl}/api/v1/ask-analytics/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             question,
             ...(workspaceId ? { workspace_id: workspaceId } : {}),
+            ...(activeThreadId ? { thread_id: activeThreadId } : {}),
           }),
         });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-
-        const assistantMsg: Message = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: data.answer,
-          trace: {
-            trace_id: data.trace_id,
-            reasoning_steps: data.reasoning_steps || [],
-            retrieval_attempts: data.retrieval_attempts || 0,
-            rewritten_query: data.rewritten_query || null,
-            routed_path: data.routed_path || "unknown",
-            latency_ms: data.latency_ms || 0,
-          },
-          sql: data.sql,
-          sqlResult: data.sql_result,
-          sources: data.sources || [],
-          maskedFields: data.masked_fields || [],
-          artifacts: data.artifacts || [],
-          sandboxResult: data.sandbox_result,
-          specialistMessages: data.specialist_messages || [],
-          routedPath: data.routed_path,
-          latencyMs: data.latency_ms,
-        };
-
-        setMessages((prev) => [...prev, assistantMsg]);
-        setTimeout(scrollToBottom, 100);
+        if (!initRes.ok) throw new Error(`HTTP ${initRes.status}`);
+        const initData = await initRes.json();
+        traceId = initData.trace_id;
       } catch (e: any) {
-        setError(`Erro ao conectar com a API: ${e.message}`);
+        setError(`Erro ao iniciar análise: ${e.message}`);
         const errorMsg: Message = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: `⚠️ Falha na conexão com a API: ${e.message}`,
+          content: `⚠️ Falha ao conectar com o serviço analítico: ${e.message}`,
         };
         setMessages((prev) => [...prev, errorMsg]);
-      } finally {
         setLoading(false);
+        return;
       }
+
+      const assistantMsgId = traceId || (Date.now() + 1).toString();
+      const initialAssistantMsg: Message = {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
+        trace: {
+          reasoning_steps: [],
+        },
+      };
+      setMessages((prev) => [...prev, initialAssistantMsg]);
+      setTimeout(scrollToBottom, 100);
+
+      let lastEventId = "0-0";
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 5;
+
+      const connectSSE = () => {
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close();
+        }
+
+        const sseUrl = `${apiUrl}/api/v1/ask-analytics/stream/${traceId}?last_event_id=${lastEventId}`;
+        const es = new EventSource(sseUrl);
+        eventSourceRef.current = es;
+
+        es.addEventListener("start", () => {
+          reconnectAttempts = 0;
+        });
+
+        es.addEventListener("step", (e: any) => {
+          lastEventId = e.lastEventId || e.id || lastEventId;
+          try {
+            const data = JSON.parse(e.data);
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== assistantMsgId) return m;
+                const currentSteps = m.trace?.reasoning_steps || [];
+                const nextSteps = [...currentSteps];
+                if (data.reasoning_step && !nextSteps.includes(data.reasoning_step)) {
+                  nextSteps.push(data.reasoning_step);
+                }
+                return {
+                  ...m,
+                  sql: data.sql || m.sql,
+                  sqlResult: data.sql_result || m.sqlResult,
+                  routedPath: data.routed_path || m.routedPath,
+                  trace: {
+                    ...m.trace,
+                    reasoning_steps: nextSteps,
+                    routed_path: data.routed_path || m.trace?.routed_path || "unknown",
+                  },
+                };
+              })
+            );
+            setTimeout(scrollToBottom, 50);
+          } catch (err) {
+            console.error("Falha ao ler step:", err);
+          }
+        });
+
+        es.addEventListener("chunk", (e: any) => {
+          lastEventId = e.lastEventId || e.id || lastEventId;
+          try {
+            const data = JSON.parse(e.data);
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== assistantMsgId) return m;
+                return {
+                  ...m,
+                  content: m.content + data.text,
+                };
+              })
+            );
+            setTimeout(scrollToBottom, 50);
+          } catch (err) {
+            console.error("Falha ao ler chunk:", err);
+          }
+        });
+
+        es.addEventListener("done", (e: any) => {
+          lastEventId = e.lastEventId || e.id || lastEventId;
+          try {
+            const data = JSON.parse(e.data);
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== assistantMsgId) return m;
+                return {
+                  ...m,
+                  content: data.answer,
+                  trace: {
+                    trace_id: data.trace_id,
+                    reasoning_steps: data.reasoning_steps || m.trace?.reasoning_steps || [],
+                    retrieval_attempts: data.retrieval_attempts || 0,
+                    rewritten_query: data.rewritten_query || null,
+                    routed_path: data.routed_path || "unknown",
+                    latency_ms: data.latency_ms || 0,
+                  },
+                  sql: data.sql,
+                  sqlResult: data.sql_result,
+                  sources: data.sources || [],
+                  maskedFields: data.masked_fields || [],
+                  artifacts: data.artifacts || [],
+                  sandboxResult: data.sandbox_result,
+                  specialistMessages: data.specialist_messages || [],
+                  routedPath: data.routed_path,
+                  latencyMs: data.latency_ms,
+                };
+              })
+            );
+            es.close();
+            setLoading(false);
+            setTimeout(scrollToBottom, 100);
+          } catch (err) {
+            console.error("Falha ao ler done:", err);
+            es.close();
+            setLoading(false);
+          }
+        });
+
+        es.addEventListener("error", () => {
+          es.close();
+          if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            const timeoutMs = Math.pow(2, reconnectAttempts) * 500;
+            console.warn(`SSE desconectado. Tentando reconectar em ${timeoutMs}ms...`);
+            setTimeout(connectSSE, timeoutMs);
+          } else {
+            setError("Erro na conexão streaming: limite de reconexões atingido.");
+            setLoading(false);
+          }
+        });
+      };
+
+      connectSSE();
     },
-    [apiUrl, loading]
+    [apiUrl, loading, workspaceId, activeThreadId]
   );
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -242,7 +430,7 @@ export function ChatPanel({ apiUrl, workspaceId }: ChatPanelProps) {
                   boxShadow: msg.role === "user" ? "0 4px 16px rgba(124,58,237,0.3)" : "none",
                 }}
               >
-                {msg.content}
+                {msg.content || (loading && msg.role === "assistant" ? "Carregando..." : "")}
               </div>
             </div>
 
@@ -270,7 +458,7 @@ export function ChatPanel({ apiUrl, workspaceId }: ChatPanelProps) {
         ))}
 
         {/* Loading indicator */}
-        {loading && (
+        {loading && messages[messages.length - 1]?.role !== "assistant" && (
           <div
             data-testid="loading-indicator"
             style={{
@@ -354,7 +542,6 @@ export function ChatPanel({ apiUrl, workspaceId }: ChatPanelProps) {
             outline: "none",
             color: "#f1f5f9",
             fontSize: "0.9rem",
-            placeholder: "#475569",
           }}
         />
         <button

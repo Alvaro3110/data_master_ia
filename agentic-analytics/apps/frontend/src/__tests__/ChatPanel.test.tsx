@@ -30,6 +30,50 @@ const mockApiResponse = {
   latency_ms: 980,
 };
 
+// Mock do EventSource
+class MockEventSource {
+  url: string;
+  listeners: Record<string, Function[]> = {};
+
+  constructor(url: string) {
+    this.url = url;
+    setTimeout(() => {
+      if (this.listeners["start"]) {
+        this.listeners["start"].forEach((cb) => cb({ type: "start" }));
+      }
+      if (this.listeners["chunk"]) {
+        this.listeners["chunk"].forEach((cb) =>
+          cb({
+            type: "chunk",
+            lastEventId: "1-0",
+            data: JSON.stringify({ text: "O segmento PME apresentou margem média de 8,3% na última safra." }),
+          })
+        );
+      }
+      if (this.listeners["done"]) {
+        this.listeners["done"].forEach((cb) =>
+          cb({
+            type: "done",
+            lastEventId: "2-0",
+            data: JSON.stringify(mockApiResponse),
+          })
+        );
+      }
+    }, 20);
+  }
+
+  addEventListener(event: string, callback: Function) {
+    if (!this.listeners[event]) {
+      this.listeners[event] = [];
+    }
+    this.listeners[event].push(callback);
+  }
+
+  close() {}
+}
+
+global.EventSource = MockEventSource as any;
+
 beforeEach(() => {
   mockFetch.mockReset();
 });
@@ -58,7 +102,6 @@ describe("ChatPanel", () => {
 
     it("exibe mensagem de boas-vindas inicial", () => {
       const { container } = render(<ChatPanel apiUrl="http://localhost:8000" />);
-      // Múltiplos elementos contêm essas palavras (título, placeholder, exemplos)
       expect(container.innerHTML).toMatch(/pricing|margem|safra|bem-vindo|analytics/i);
     });
   });
@@ -75,7 +118,7 @@ describe("ChatPanel", () => {
     it("exibe a pergunta do usuário após envio", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => ({ trace_id: "trace-abc-123" }),
       });
       render(<ChatPanel apiUrl="http://localhost:8000" />);
       const input = screen.getByRole("textbox");
@@ -89,7 +132,7 @@ describe("ChatPanel", () => {
     it("exibe a resposta da API após envio", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => ({ trace_id: "trace-abc-123" }),
       });
       render(<ChatPanel apiUrl="http://localhost:8000" />);
       const input = screen.getByRole("textbox");
@@ -103,7 +146,7 @@ describe("ChatPanel", () => {
     it("limpa o input após envio", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => ({ trace_id: "trace-abc-123" }),
       });
       render(<ChatPanel apiUrl="http://localhost:8000" />);
       const input = screen.getByRole("textbox") as HTMLInputElement;
@@ -115,7 +158,7 @@ describe("ChatPanel", () => {
     it("envia com Enter", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => ({ trace_id: "trace-abc-123" }),
       });
       render(<ChatPanel apiUrl="http://localhost:8000" />);
       const input = screen.getByRole("textbox");
@@ -128,7 +171,9 @@ describe("ChatPanel", () => {
     it("exibe indicador de loading durante chamada à API", async () => {
       let resolvePromise: (value: any) => void;
       mockFetch.mockReturnValueOnce(
-        new Promise((resolve) => { resolvePromise = resolve; })
+        new Promise((resolve) => {
+          resolvePromise = resolve;
+        })
       );
       render(<ChatPanel apiUrl="http://localhost:8000" />);
       const input = screen.getByRole("textbox");
@@ -137,7 +182,10 @@ describe("ChatPanel", () => {
       await waitFor(() =>
         expect(screen.getByTestId("loading-indicator")).toBeInTheDocument()
       );
-      resolvePromise!({ ok: true, json: async () => mockApiResponse });
+      resolvePromise!({
+        ok: true,
+        json: async () => ({ trace_id: "trace-abc-123" }),
+      });
     });
   });
 
@@ -149,9 +197,7 @@ describe("ChatPanel", () => {
       await userEvent.type(input, "Qual a margem?");
       fireEvent.click(screen.getByRole("button", { name: /enviar|send|analisar/i }));
       await waitFor(() => {
-        const { container } = render(<ChatPanel apiUrl="unused" />);
-        // Verifica que o componente criou mensagem de erro no DOM
-        expect(screen.getAllByText(/erro|error|falha/i).length).toBeGreaterThan(0);
+        expect(screen.getByText(/erro ao iniciar análise/i)).toBeInTheDocument();
       });
     });
   });
@@ -160,7 +206,6 @@ describe("ChatPanel", () => {
     it("exibe pelo menos 3 perguntas de exemplo", () => {
       render(<ChatPanel apiUrl="http://localhost:8000" />);
       const examples = screen.getAllByRole("button");
-      // Botão de envio + pelo menos 3 exemplos
       expect(examples.length).toBeGreaterThanOrEqual(4);
     });
   });

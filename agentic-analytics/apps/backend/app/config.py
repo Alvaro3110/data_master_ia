@@ -25,7 +25,10 @@ class Settings(BaseSettings):
     OPENSEARCH_INDEX_RULES: str = "pricing-rules"
 
     # PostgreSQL
-    POSTGRES_URL: str = "postgresql+psycopg2://app:app@localhost:5432/app"
+    POSTGRES_URL: str = "postgresql+psycopg2://app:app@localhost:54320/app"
+
+    # Redis
+    REDIS_URL: str = "redis://localhost:63790"
 
     # DuckDB
     DUCKDB_PATH: str = "./data/pricing.duckdb"
