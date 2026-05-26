@@ -30,10 +30,23 @@ def should_retry(retry_state):
 )
 async def generate_response(prompt: str, model: str = "llama3") -> str:
     """
-    Invoca o LLM localmente usando o OLLAMA_HOST oficial.
-    No futuro, se a chave OPENAI_API_KEY estiver configurada e o provedor for 'openai', 
-    esta função pode usar o client 'openai-python'.
+    Invoca o LLM. Usa OpenAI se a chave estiver configurada,
+    caso contrário faz fallback para o Ollama local.
     """
+    if settings.has_openai_key:
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import HumanMessage
+            
+            chat = ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
+            msg = await chat.ainvoke([HumanMessage(content=prompt)])
+            return msg.content
+        except ImportError:
+            logger.error("langchain_openai não instalado, fazendo fallback para Ollama.")
+        except Exception as e:
+            logger.error(f"Erro na API da OpenAI: {e}")
+            raise LLMProviderError(f"OpenAI error: {e}") from e
+
     url = f"{settings.OLLAMA_HOST}/api/generate"
     payload = {
         "model": model,
