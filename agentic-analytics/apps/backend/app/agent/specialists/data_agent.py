@@ -17,7 +17,7 @@ class DataAgent:
         chunks, sources = search_rules(question, top_k=2)
         context = "\n\n".join(chunks)
 
-        sql, result, masked = run_text2sql(question, rag_context=context)
+        sql, result, masked = await run_text2sql(question, rag_context=context)
 
         return {
             "content": f"Executei a consulta SQL. Retornou {len(result)} linhas.",

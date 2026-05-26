@@ -271,35 +271,16 @@ class Text2SQLAgent:
         return clean[:settings.SQL_MAX_ROWS], masked_fields
 
 
-# ── Backward-compat: função legada usada pelo graph.py ───────────────────────
-
-def run_text2sql(
+async def run_text2sql(
     question: str,
     rag_context: str = "",
 ) -> tuple[str | None, list[dict], list[str]]:
     """
-    Wrapper síncrono para compatibilidade com o graph.py atual.
-    Usa keyword matching como implementação legada até graph.py ser atualizado.
+    Wrapper assíncrono para compatibilidade com o graph.py atual.
     """
-    import asyncio
     agent = Text2SQLAgent()
-    try:
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(agent.execute(question, rag_context))
-    except RuntimeError:
-        # Já dentro de um loop asyncio — usa fallback síncrono
-        result = _fallback_sync(question)
+    result = await agent.execute(question, rag_context)
     return result.sql, result.rows, result.masked_fields
-
-
-def _fallback_sync(question: str) -> Text2SQLResult:
-    """Fallback puramente síncrono via keyword matching."""
-    sql = _infer_sql(question)
-    if sql:
-        verdict = validate_sql(sql)
-        if verdict.allowed:
-            return Text2SQLResult(decision="fallback", sql=sql)
-    return Text2SQLResult(decision="clarify", sql=None)
 
 
 # ── Keyword matching (fallback legado) ───────────────────────────────────────

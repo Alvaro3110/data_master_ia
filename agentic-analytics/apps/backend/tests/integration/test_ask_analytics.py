@@ -1,12 +1,16 @@
 import pytest
-from fastapi.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
 from app.main import app
 
-client = TestClient(app)
+@pytest.fixture
+async def client():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
 
-def test_ask_analytics_routing_sql():
+@pytest.mark.asyncio
+async def test_ask_analytics_routing_sql(client):
     """Testa se a API responde a perguntas que disparam a rota analytics (SQL)."""
-    response = client.post(
+    response = await client.post(
         "/api/v1/ask-analytics",
         json={"question": "Qual foi a margem da última safra no segmento Varejo?"}
     )
@@ -19,9 +23,10 @@ def test_ask_analytics_routing_sql():
     assert "reasoning_steps" in data
     assert data["sql"] is not None
 
-def test_ask_analytics_routing_rag():
+@pytest.mark.asyncio
+async def test_ask_analytics_routing_rag(client):
     """Testa se a API responde a perguntas conceituais disparando RAG."""
-    response = client.post(
+    response = await client.post(
         "/api/v1/ask-analytics",
         json={"question": "O que significa a sigla ROAE no glossário de pricing?"}
     )
@@ -33,7 +38,8 @@ def test_ask_analytics_routing_rag():
     assert data["routed_path"] in ["conceptual", "rules_only", "hybrid", "swarm_risk_agent", "swarm_data_agent", "swarm_supervisor"]
     assert "reasoning_steps" in data
 
-def test_ask_analytics_missing_question():
+@pytest.mark.asyncio
+async def test_ask_analytics_missing_question(client):
     """Testa a validação de request sem question."""
-    response = client.post("/api/v1/ask-analytics", json={})
+    response = await client.post("/api/v1/ask-analytics", json={})
     assert response.status_code == 422

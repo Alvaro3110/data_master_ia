@@ -1,13 +1,17 @@
 import pytest
-from fastapi.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
 from app.main import app
 
-client = TestClient(app)
+@pytest.fixture
+async def client():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
 
-def test_audit_trace_flow():
+@pytest.mark.asyncio
+async def test_audit_trace_flow(client):
     """Testa se uma query cria um trace e se esse trace pode ser consultado via API."""
     # 1. Faz uma pergunta para gerar um trace
-    response = client.post(
+    response = await client.post(
         "/api/v1/ask-analytics",
         json={"question": "Teste de rastreabilidade de query de margem e auditoria"}
     )
@@ -17,7 +21,7 @@ def test_audit_trace_flow():
     assert trace_id is not None
     
     # 2. Consulta o trace gerado na rota de auditoria
-    trace_response = client.get(f"/api/v1/traces/{trace_id}")
+    trace_response = await client.get(f"/api/v1/traces/{trace_id}")
     
     # Pode ser 200 ou 404 dependendo do banco de dados estar configurado localmente 
     # ou se o duckdb teve tempo de consolidar o log assincronamente.
