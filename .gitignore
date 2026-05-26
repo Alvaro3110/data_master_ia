@@ -1,0 +1,50 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+.venv/
+venv/
+env/
+
+# Build outputs
+dist/
+tmp/
+out/
+build/
+.next/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Databases & logs
+*.db
+*.sqlite
+*.log
+
+# Environments
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDEs
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Project specifics
+eval_report.json

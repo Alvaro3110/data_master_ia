@@ -1,0 +1,112 @@
+version: "3.9"
+
+services:
+  # ─── OpenSearch (BM25 + Vector search) ───────────────────────────────────
+  opensearch:
+    image: opensearchproject/opensearch:2.13.0
+    container_name: rag-opensearch
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - plugins.security.disabled=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'green\\|yellow'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - rag_network
+
+  # ─── PostgreSQL (system of record + audit log) ───────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag-postgres
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag_network
+
+  # ─── Ollama (LLM local) ───────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rag-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - rag_network
+    # Pull llama3.2:1b on startup
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull llama3.2:1b && wait"]
+
+  # ─── FastAPI Backend ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: ../apps/backend
+      dockerfile: Dockerfile
+    container_name: rag-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    environment:
+      - OPENSEARCH_HOST=http://opensearch:9200
+      - POSTGRES_URL=postgresql+psycopg2://app:app@postgres:5432/app
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../apps/backend/app:/app/app
+      - ../data:/app/data
+    networks:
+      - rag_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:8000/api/v1/health | grep -q 'ok'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ─── Next.js Frontend ─────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../apps/frontend
+      dockerfile: Dockerfile
+    container_name: rag-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - api
+    networks:
+      - rag_network
+
+volumes:
+  opensearch_data:
+  postgres_data:
+  ollama_data:
+
+networks:
+  rag_network:
+    driver: bridge
