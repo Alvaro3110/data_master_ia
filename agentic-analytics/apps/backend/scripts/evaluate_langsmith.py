@@ -64,7 +64,7 @@ async def evaluate_dataset():
             latency_ms = int((time.time() - start_time) * 1000)
             
             # Avalia relevância
-            eval_result = evaluate_relevance(question, result["answer"])
+            eval_result = await evaluate_relevance(question, result["answer"])
             score = eval_result["score"]
             is_relevant = eval_result["is_relevant"]
             

@@ -16,7 +16,7 @@ class TestAnswerRelevance:
         question = "Qual a margem da safra?"
         answer = "A margem apurada para a safra atual é de 4.2%."
         
-        result = evaluate_relevance(question, answer)
+        result = await evaluate_relevance(question, answer)
         assert result["score"] >= 0.6
         assert result["is_relevant"] is True
 
@@ -26,8 +26,8 @@ class TestAnswerRelevance:
         from app.agent.evaluators import evaluate_relevance
         
         question = "Qual a margem da safra?"
-        answer = "A lua é o satélite natural da Terra."
+        answer = "A pizza é muito boa."
         
-        result = evaluate_relevance(question, answer)
+        result = await evaluate_relevance(question, answer)
         assert result["score"] < 0.5
         assert result["is_relevant"] is False

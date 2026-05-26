@@ -7,7 +7,7 @@ import httpx
 from app.config import settings
 
 
-def evaluate_relevance(question: str, answer: str) -> dict:
+async def evaluate_relevance(question: str, answer: str) -> dict:
     """
     Usa LLM-as-a-judge para classificar se a resposta atende à pergunta.
     """
@@ -22,18 +22,8 @@ def evaluate_relevance(question: str, answer: str) -> dict:
     """
     
     try:
-        resp = httpx.post(
-            f"{settings.OLLAMA_HOST}/api/generate",
-            json={
-                "model": settings.OLLAMA_MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "format": "json"
-            },
-            timeout=10.0
-        )
-        resp.raise_for_status()
-        content = resp.json().get("response", "{}")
+        from app.services.llm_provider import generate_response
+        content = await generate_response(prompt=prompt, model=settings.OLLAMA_MODEL)
         data = json.loads(content)
         score = float(data.get("score", 0.0))
         return {

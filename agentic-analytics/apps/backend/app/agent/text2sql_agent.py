@@ -104,19 +104,9 @@ class Text2SQLAgent:
         return self._scenarios
 
     async def _call_llm(self, prompt: str) -> str:
-        """Chama o Ollama com o prompt e retorna a resposta como string."""
-        url = f"{settings.OLLAMA_BASE_URL}/api/generate"
-        payload = {
-            "model": settings.OLLAMA_MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json",
-        }
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("response", "")
+        """Chama o LLM Provider configurado com o prompt e retorna a resposta como string."""
+        from app.services.llm_provider import generate_response
+        return await generate_response(prompt=prompt, model=settings.OLLAMA_MODEL)
 
     async def generate_sql(
         self,
