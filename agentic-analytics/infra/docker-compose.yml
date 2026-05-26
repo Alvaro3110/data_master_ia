@@ -3,7 +3,7 @@ version: "3.9"
 services:
   # ─── OpenSearch (BM25 + Vector search) ───────────────────────────────────
   opensearch:
-    image: opensearchproject/opensearch:2.13.0
+    image: opensearchproject/opensearch:2.19.0
     container_name: rag-opensearch
     environment:
       - discovery.type=single-node
@@ -12,8 +12,8 @@ services:
       - DISABLE_INSTALL_DEMO_CONFIG=true
       - DISABLE_SECURITY_PLUGIN=true
     ports:
-      - "9200:9200"
-      - "9600:9600"
+      - "9205:9200"
+      - "9605:9600"
     volumes:
       - opensearch_data:/usr/share/opensearch/data
     healthcheck:

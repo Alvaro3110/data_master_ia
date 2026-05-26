@@ -24,8 +24,6 @@ dependencies = [
     # OpenSearch
     "opensearch-py>=2.6.0",
 
-    # Embeddings (fallback local se sem Jina key)
-    "sentence-transformers>=3.0.0",
 
     # Database
     "psycopg[binary]>=3.1.0",

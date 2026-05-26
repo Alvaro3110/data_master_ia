@@ -49,7 +49,7 @@ class RagAgent:
 
     def _get_embedding(self, text: str, task: str = "retrieval.passage") -> list[float]:
         """
-        Gera embedding via Jina API.
+        Gera embedding via Jina API ou OpenAI API.
         IMPORTANTE: usar task='retrieval.query' para perguntas do usuário,
         e task='retrieval.passage' para documentos indexados.
         """
@@ -64,7 +64,20 @@ class RagAgent:
                 resp.raise_for_status()
                 return resp.json()["data"][0]["embedding"]
             except Exception as e:
-                logger.warning(f"Jina API falhou: {e} — usando embedding local")
+                logger.warning(f"Jina API falhou: {e} — caindo para outros provedores")
+
+        if settings.has_openai_key:
+            try:
+                resp = httpx.post(
+                    "https://api.openai.com/v1/embeddings",
+                    headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                    json={"model": "text-embedding-3-small", "dimensions": JINA_EMBEDDING_DIM, "input": [text]},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                return resp.json()["data"][0]["embedding"]
+            except Exception as e:
+                logger.warning(f"OpenAI Embeddings falhou: {e} — caindo para sentence-transformers")
 
         # Fallback: sentence-transformers local
         try:
