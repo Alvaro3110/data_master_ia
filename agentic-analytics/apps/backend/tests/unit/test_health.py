@@ -29,7 +29,9 @@ def test_health_check_all_ok(mock_create_engine, mock_get):
 
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    data = response.json()
+    payload = response.json()
+    data = payload["data"]
+    assert payload["trace_id"]
     assert data["status"] == "ok"
     assert "services" in data
     assert data["services"]["opensearch"]["status"] == "healthy"
@@ -55,7 +57,9 @@ def test_health_check_degraded(mock_create_engine, mock_get):
 
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    data = response.json()
+    payload = response.json()
+    data = payload["data"]
+    assert payload["trace_id"]
     assert data["status"] == "degraded"
     assert data["services"]["postgres"]["status"] == "unhealthy"
     assert "DB Connection Refused" in data["services"]["postgres"]["detail"]

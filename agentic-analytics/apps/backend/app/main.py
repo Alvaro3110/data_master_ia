@@ -6,11 +6,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 import uuid
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import health, ask_analytics, search_rules, traces, workspaces
+from app.api.v1.response_envelope import envelope_payload
 from app.config import settings
 from app.db.session import init_db
 
@@ -66,12 +68,29 @@ app.include_router(traces.router, prefix="/api/v1", tags=["observability"])
 app.include_router(workspaces.router)
 
 
+# ─── Exception handlers ──────────────────────────────────────────────────────
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=envelope_payload({"detail": exc.detail}, request=request),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content=envelope_payload({"detail": exc.errors()}, request=request),
+    )
+
+
 # ─── Root ────────────────────────────────────────────────────────────────────
 @app.get("/")
-async def root():
-    return {
+async def root(request: Request):
+    return envelope_payload({
         "service": "Agentic Analytics API",
         "version": "0.1.0",
         "docs": "/api/docs",
         "health": "/api/v1/health",
-    }
+    }, request=request)

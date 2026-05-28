@@ -7,6 +7,11 @@ async def client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
+
+def unwrap(payload: dict):
+    return payload["data"]
+
+
 @pytest.mark.asyncio
 async def test_ask_analytics_routing_sql(client):
     """Testa se a API responde a perguntas que disparam a rota analytics (SQL)."""
@@ -15,10 +20,11 @@ async def test_ask_analytics_routing_sql(client):
         json={"question": "Qual foi a margem da última safra no segmento Varejo?"}
     )
     assert response.status_code == 200
-    data = response.json()
+    payload = response.json()
+    data = unwrap(payload)
     
     assert "answer" in data
-    assert "trace_id" in data
+    assert payload["trace_id"]
     assert data["routed_path"] in ["analytics", "hybrid", "swarm_data_agent", "swarm_supervisor"]
     assert "reasoning_steps" in data
     assert data["sql"] is not None
@@ -31,10 +37,11 @@ async def test_ask_analytics_routing_rag(client):
         json={"question": "O que significa a sigla ROAE no glossário de pricing?"}
     )
     assert response.status_code == 200
-    data = response.json()
+    payload = response.json()
+    data = unwrap(payload)
     
     assert "answer" in data
-    assert "trace_id" in data
+    assert payload["trace_id"]
     assert data["routed_path"] in ["conceptual", "rules_only", "hybrid", "swarm_risk_agent", "swarm_data_agent", "swarm_supervisor"]
     assert "reasoning_steps" in data
 

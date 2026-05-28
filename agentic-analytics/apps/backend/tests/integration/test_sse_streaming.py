@@ -19,7 +19,7 @@ async def test_sse_stream_replay_buffer():
     # 2. Adiciona 3 eventos fictícios ao stream
     id1 = await redis_mgr.add_event(trace_id, "start", {"q": "teste 1"})
     id2 = await redis_mgr.add_event(trace_id, "step", {"step": "processando"})
-    id3 = await redis_mgr.add_event(trace_id, "done", {"answer": "finalizado"})
+    id3 = await redis_mgr.add_event(trace_id, "done", {"trace_id": trace_id, "answer": "finalizado"})
     
     # 3. Consome sem last_event_id (deve retornar todos os 3)
     response = client.get(f"/api/v1/ask-analytics/stream/{trace_id}")
@@ -51,7 +51,7 @@ async def test_full_sse_workflow(monkeypatch):
         await redis_mgr.add_event(trace_id, "step", {"node": "guardrail", "reasoning_step": "ok"})
         await redis_mgr.add_event(trace_id, "chunk", {"text": "Resposta"})
         await redis_mgr.add_event(trace_id, "chunk", {"text": " mockada"})
-        await redis_mgr.add_event(trace_id, "done", {"answer": "Resposta mockada", "status": "success"})
+        await redis_mgr.add_event(trace_id, "done", {"trace_id": trace_id, "answer": "Resposta mockada", "status": "success"})
 
     monkeypatch.setattr("app.agent.graph.run_analytics_stream", mock_run_analytics_stream)
 
@@ -61,7 +61,7 @@ async def test_full_sse_workflow(monkeypatch):
         json={"question": "Qual a margem da safra 2026?"}
     )
     assert res_post.status_code == 200
-    trace_id = res_post.json()["trace_id"]
+    trace_id = res_post.json()["data"]["trace_id"]
     assert trace_id is not None
 
     # Aguarda o processamento em background (mockado) persistir no Redis

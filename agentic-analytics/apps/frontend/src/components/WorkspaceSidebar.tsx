@@ -16,6 +16,17 @@ interface WorkspaceSidebarProps {
   activeWorkspaceId?: string;
 }
 
+function unwrapData<T>(payload: unknown): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload
+  ) {
+    return (payload as { data: T }).data;
+  }
+  return payload as T;
+}
+
 export function WorkspaceSidebar({
   userId,
   apiUrl,
@@ -30,7 +41,10 @@ export function WorkspaceSidebar({
     setLoading(true);
     try {
       const res = await fetch(`${apiUrl}/api/v1/workspaces?user_id=${encodeURIComponent(userId)}`);
-      if (res.ok) setWorkspaces(await res.json());
+      if (res.ok) {
+        const payload = await res.json();
+        setWorkspaces(unwrapData<Workspace[]>(payload));
+      }
     } finally {
       setLoading(false);
     }

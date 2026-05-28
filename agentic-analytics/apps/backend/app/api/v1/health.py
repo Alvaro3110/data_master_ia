@@ -2,16 +2,16 @@
 from datetime import datetime
 
 import httpx
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request
 
+from app.api.v1.response_envelope import envelope_response
 from app.config import settings
 
 router = APIRouter()
 
 
 @router.get("/health")
-async def health_check():
+async def health_check(request: Request):
     """
     Verifica saúde de todos os serviços.
     Padrão: Week3 usa /api/v1/health como referência de healthcheck.
@@ -47,12 +47,13 @@ async def health_check():
 
     all_ok = all(s.get("status") in ("healthy", "degraded") for s in services.values())
 
-    return JSONResponse(
-        status_code=200,
-        content={
+    return envelope_response(
+        data={
             "status": "ok" if all_ok else "degraded",
             "timestamp": datetime.utcnow().isoformat(),
             "services": services,
             "version": "0.1.0",
         },
+        request=request,
+        status_code=200,
     )

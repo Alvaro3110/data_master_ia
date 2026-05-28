@@ -18,6 +18,7 @@ from app.agent.graph import run_analytics
 from app.tracing.audit import persist_audit_log
 from app.config import settings
 from app.api.v1.workspaces import get_workspace, persist_thread_message
+from app.api.v1.response_envelope import envelope_payload
 
 router = APIRouter()
 
@@ -50,7 +51,7 @@ class AskResponse(BaseModel):
     status: str = "success"
 
 
-@router.post("/ask-analytics", response_model=AskResponse)
+@router.post("/ask-analytics")
 async def ask_analytics(
     body: AskRequest,
     request: Request,
@@ -125,7 +126,7 @@ async def ask_analytics(
             },
         )
 
-    return AskResponse(
+    response_data = AskResponse(
         trace_id=trace_id,
         question=masked_question,
         answer=result.get("answer", ""),
@@ -142,6 +143,11 @@ async def ask_analytics(
         specialist_messages=result.get("specialist_messages", []),
         latency_ms=latency_ms,
         status="success",
+    )
+    return envelope_payload(
+        data=response_data.model_dump(),
+        request=request,
+        trace_id=trace_id,
     )
 
 
@@ -250,7 +256,11 @@ async def start_analytics_stream(
     """Inicia processamento do agente em background e retorna o trace_id do stream."""
     trace_id = getattr(request.state, "trace_id", str(uuid.uuid4()))
     background_tasks.add_task(background_run_stream, body, trace_id)
-    return {"trace_id": trace_id}
+    return envelope_payload(
+        data={"trace_id": trace_id},
+        request=request,
+        trace_id=trace_id,
+    )
 
 
 @router.get("/ask-analytics/stream/{trace_id}")

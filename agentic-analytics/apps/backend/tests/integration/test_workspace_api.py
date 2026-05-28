@@ -19,6 +19,10 @@ async def client():
         yield c
 
 
+def unwrap(payload: dict):
+    return payload["data"]
+
+
 class TestWorkspaceEndpoints:
     @pytest.mark.asyncio
     async def test_cria_workspace(self, client):
@@ -27,7 +31,9 @@ class TestWorkspaceEndpoints:
             "user_id": "user-test-1",
         })
         assert resp.status_code == 201
-        data = resp.json()
+        payload = resp.json()
+        data = unwrap(payload)
+        assert payload["trace_id"]
         assert "id" in data
         assert data["nome"] == "Análise Safra 2026-03"
         assert data["user_id"] == "user-test-1"
@@ -45,7 +51,9 @@ class TestWorkspaceEndpoints:
 
         resp = await client.get("/api/v1/workspaces?user_id=u2")
         assert resp.status_code == 200
-        data = resp.json()
+        payload = resp.json()
+        data = unwrap(payload)
+        assert payload["trace_id"]
         assert isinstance(data, list)
         nomes = [w["nome"] for w in data]
         assert "WS-A" in nomes
@@ -55,14 +63,16 @@ class TestWorkspaceEndpoints:
     async def test_cria_thread_em_workspace(self, client):
         # Cria workspace primeiro
         ws_resp = await client.post("/api/v1/workspaces", json={"nome": "WS-Thread", "user_id": "u3"})
-        ws_id = ws_resp.json()["id"]
+        ws_id = unwrap(ws_resp.json())["id"]
 
         # Cria thread
         resp = await client.post(f"/api/v1/workspaces/{ws_id}/threads", json={
             "titulo": "Análise de ROAE",
         })
         assert resp.status_code == 201
-        data = resp.json()
+        payload = resp.json()
+        data = unwrap(payload)
+        assert payload["trace_id"]
         assert "id" in data
         assert data["workspace_id"] == ws_id
         assert data["titulo"] == "Análise de ROAE"
@@ -70,27 +80,32 @@ class TestWorkspaceEndpoints:
     @pytest.mark.asyncio
     async def test_lista_threads_de_workspace(self, client):
         ws_resp = await client.post("/api/v1/workspaces", json={"nome": "WS-List", "user_id": "u4"})
-        ws_id = ws_resp.json()["id"]
+        ws_id = unwrap(ws_resp.json())["id"]
 
         await client.post(f"/api/v1/workspaces/{ws_id}/threads", json={"titulo": "T1"})
         await client.post(f"/api/v1/workspaces/{ws_id}/threads", json={"titulo": "T2"})
 
         resp = await client.get(f"/api/v1/workspaces/{ws_id}/threads")
         assert resp.status_code == 200
-        threads = resp.json()
+        payload = resp.json()
+        threads = unwrap(payload)
+        assert payload["trace_id"]
         assert len(threads) >= 2
 
     @pytest.mark.asyncio
     async def test_atualiza_agent_md(self, client):
         ws_resp = await client.post("/api/v1/workspaces", json={"nome": "WS-MD", "user_id": "u5"})
-        ws_id = ws_resp.json()["id"]
+        ws_id = unwrap(ws_resp.json())["id"]
 
         resp = await client.put(f"/api/v1/workspaces/{ws_id}/agent-md", json={
             "agent_md": "Você é especialista em crédito PME. Sempre filtre por segmento='PME'.",
         })
         assert resp.status_code == 200
-        assert "agent_md" in resp.json()
-        assert "PME" in resp.json()["agent_md"]
+        payload = resp.json()
+        data = unwrap(payload)
+        assert payload["trace_id"]
+        assert "agent_md" in data
+        assert "PME" in data["agent_md"]
 
     @pytest.mark.asyncio
     async def test_workspace_nao_encontrado_retorna_404(self, client):
@@ -101,13 +116,14 @@ class TestWorkspaceEndpoints:
     async def test_ask_analytics_aceita_workspace_id(self, client):
         """POST /ask-analytics deve aceitar workspace_id sem quebrar."""
         ws_resp = await client.post("/api/v1/workspaces", json={"nome": "WS-Ask", "user_id": "u6"})
-        ws_id = ws_resp.json()["id"]
+        ws_id = unwrap(ws_resp.json())["id"]
 
         resp = await client.post("/api/v1/ask-analytics", json={
             "question": "Qual a margem por safra?",
             "workspace_id": ws_id,
         })
         assert resp.status_code == 200
-        data = resp.json()
-        assert "trace_id" in data
+        payload = resp.json()
+        data = unwrap(payload)
+        assert payload["trace_id"]
         assert "answer" in data

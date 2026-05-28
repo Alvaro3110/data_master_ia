@@ -16,8 +16,8 @@ async def test_audit_trace_flow(client):
         json={"question": "Teste de rastreabilidade de query de margem e auditoria"}
     )
     assert response.status_code == 200
-    data = response.json()
-    trace_id = data.get("trace_id")
+    payload = response.json()
+    trace_id = payload.get("trace_id")
     assert trace_id is not None
     
     # 2. Consulta o trace gerado na rota de auditoria
@@ -29,7 +29,7 @@ async def test_audit_trace_flow(client):
     assert trace_response.status_code in [200, 404]
     
     if trace_response.status_code == 200:
-        trace_data = trace_response.json()
+        trace_data = trace_response.json()["data"]
         assert trace_data["trace_id"] == trace_id
         assert "question" in trace_data
         assert "latency_ms" in trace_data

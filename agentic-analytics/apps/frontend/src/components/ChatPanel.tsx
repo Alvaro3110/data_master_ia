@@ -33,6 +33,17 @@ interface ChatPanelProps {
   workspaceId?: string;  // Fase 2: workspace opcional
 }
 
+function unwrapData<T>(payload: unknown): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload
+  ) {
+    return (payload as { data: T }).data;
+  }
+  return payload as T;
+}
+
 export function ChatPanel({ apiUrl, workspaceId }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -67,7 +78,7 @@ export function ChatPanel({ apiUrl, workspaceId }: ChatPanelProps) {
       try {
         const res = await fetch(`${apiUrl}/api/v1/workspaces/${workspaceId}/threads`);
         if (!res.ok) throw new Error("Erro ao carregar threads");
-        const threads = await res.json();
+        const threads = unwrapData<any[]>(await res.json());
 
         let threadId = "";
         let historicalMessages: Message[] = [];
@@ -104,7 +115,7 @@ export function ChatPanel({ apiUrl, workspaceId }: ChatPanelProps) {
             body: JSON.stringify({ titulo: "Análise Principal" }),
           });
           if (createRes.ok) {
-            const newThread = await createRes.json();
+            const newThread = unwrapData<any>(await createRes.json());
             threadId = newThread.id;
           }
         }
@@ -147,7 +158,7 @@ export function ChatPanel({ apiUrl, workspaceId }: ChatPanelProps) {
         });
 
         if (!initRes.ok) throw new Error(`HTTP ${initRes.status}`);
-        const initData = await initRes.json();
+        const initData = unwrapData<{ trace_id: string }>(await initRes.json());
         traceId = initData.trace_id;
       } catch (e: any) {
         setError(`Erro ao iniciar análise: ${e.message}`);

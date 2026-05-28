@@ -11,6 +11,7 @@ import { ChatPanel } from "../components/ChatPanel";
 // Mock do fetch global
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
+const wrap = (data: unknown) => ({ trace_id: "trace-abc-123", data });
 
 const mockApiResponse = {
   trace_id: "trace-abc-123",
@@ -118,7 +119,7 @@ describe("ChatPanel", () => {
     it("exibe a pergunta do usuário após envio", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trace_id: "trace-abc-123" }),
+        json: async () => wrap({ trace_id: "trace-abc-123" }),
       });
       render(<ChatPanel apiUrl="http://localhost:8000" />);
       const input = screen.getByRole("textbox");
@@ -132,7 +133,7 @@ describe("ChatPanel", () => {
     it("exibe a resposta da API após envio", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trace_id: "trace-abc-123" }),
+        json: async () => wrap({ trace_id: "trace-abc-123" }),
       });
       render(<ChatPanel apiUrl="http://localhost:8000" />);
       const input = screen.getByRole("textbox");
@@ -146,7 +147,7 @@ describe("ChatPanel", () => {
     it("limpa o input após envio", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trace_id: "trace-abc-123" }),
+        json: async () => wrap({ trace_id: "trace-abc-123" }),
       });
       render(<ChatPanel apiUrl="http://localhost:8000" />);
       const input = screen.getByRole("textbox") as HTMLInputElement;
@@ -158,7 +159,7 @@ describe("ChatPanel", () => {
     it("envia com Enter", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ trace_id: "trace-abc-123" }),
+        json: async () => wrap({ trace_id: "trace-abc-123" }),
       });
       render(<ChatPanel apiUrl="http://localhost:8000" />);
       const input = screen.getByRole("textbox");
@@ -184,7 +185,7 @@ describe("ChatPanel", () => {
       );
       resolvePromise!({
         ok: true,
-        json: async () => ({ trace_id: "trace-abc-123" }),
+        json: async () => wrap({ trace_id: "trace-abc-123" }),
       });
     });
   });

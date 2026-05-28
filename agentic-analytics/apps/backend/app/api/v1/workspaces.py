@@ -3,13 +3,14 @@ Workspace API — Fase 2.5: CRUD de Workspaces e Threads persistidos em banco de
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from pydantic import BaseModel, Field
 from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db, SessionLocal
 from app.models.workspace import Workspace, Thread
+from app.api.v1.response_envelope import envelope_response
 
 router = APIRouter(prefix="/api/v1/workspaces", tags=["workspaces"])
 
@@ -45,39 +46,45 @@ class UpdateAgentMdRequest(BaseModel):
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.post("", status_code=201)
-async def create_workspace(body: CreateWorkspaceRequest, db_session: Session = Depends(get_db)):
+async def create_workspace(
+    body: CreateWorkspaceRequest,
+    request: Request,
+    db_session: Session = Depends(get_db),
+):
     """Cria um novo workspace de análise."""
     ws = Workspace(nome=body.nome, user_id=body.user_id, agent_md=body.agent_md)
     db_session.add(ws)
     db_session.commit()
     db_session.refresh(ws)
-    return ws.to_dict()
+    return envelope_response(ws.to_dict(), request=request, status_code=201)
 
 
 @router.get("")
 async def list_workspaces(
+    request: Request,
     user_id: str = Query(..., description="ID do usuário"),
     db_session: Session = Depends(get_db),
 ):
     """Lista todos os workspaces de um usuário."""
     workspaces = db_session.query(Workspace).filter(Workspace.user_id == user_id).all()
-    return [ws.to_dict() for ws in workspaces]
+    return envelope_response([ws.to_dict() for ws in workspaces], request=request)
 
 
 @router.get("/{workspace_id}/threads")
-async def list_threads(workspace_id: str, db_session: Session = Depends(get_db)):
+async def list_threads(workspace_id: str, request: Request, db_session: Session = Depends(get_db)):
     """Lista threads de um workspace."""
     ws = db_session.query(Workspace).filter(Workspace.id == workspace_id).first()
     if not ws:
         raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' não encontrado.")
     threads = db_session.query(Thread).filter(Thread.workspace_id == workspace_id).all()
-    return [t.to_dict() for t in threads]
+    return envelope_response([t.to_dict() for t in threads], request=request)
 
 
 @router.post("/{workspace_id}/threads", status_code=201)
 async def create_thread(
     workspace_id: str,
     body: CreateThreadRequest,
+    request: Request,
     db_session: Session = Depends(get_db),
 ):
     """Cria uma nova thread dentro de um workspace."""
@@ -88,13 +95,14 @@ async def create_thread(
     db_session.add(thread)
     db_session.commit()
     db_session.refresh(thread)
-    return thread.to_dict()
+    return envelope_response(thread.to_dict(), request=request, status_code=201)
 
 
 @router.put("/{workspace_id}/agent-md")
 async def update_agent_md(
     workspace_id: str,
     body: UpdateAgentMdRequest,
+    request: Request,
     db_session: Session = Depends(get_db),
 ):
     """Atualiza o agent.md (instruções customizadas) do workspace."""
@@ -104,7 +112,7 @@ async def update_agent_md(
     ws.agent_md = body.agent_md
     db_session.commit()
     db_session.refresh(ws)
-    return ws.to_dict()
+    return envelope_response(ws.to_dict(), request=request)
 
 
 def get_workspace(workspace_id: str) -> Optional[Workspace]:
