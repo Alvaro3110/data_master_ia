@@ -7,7 +7,10 @@ test.describe('ChatPanel E2E Tests', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ trace_id: 'fake-trace-123' }),
+        body: JSON.stringify({
+          trace_id: 'fake-trace-123',
+          data: { trace_id: 'fake-trace-123' },
+        }),
       });
     });
 

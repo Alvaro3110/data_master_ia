@@ -86,12 +86,15 @@ curl -X POST http://localhost:8000/api/v1/ask-analytics \
 ```json
 {
   "trace_id": "uuid",
-  "answer": "O segmento Varejo apresentou o menor ROAE médio...",
-  "routed_path": "analytics",
-  "reasoning_steps": ["Validated query scope (score: 82/100)", "Generated and executed SQL (50 rows returned)", "Generated answer from context"],
-  "sql": "SELECT segmento, AVG(roae)...",
-  "masked_fields": ["cliente_id"],
-  "latency_ms": 1240
+  "data": {
+    "trace_id": "uuid",
+    "answer": "O segmento Varejo apresentou o menor ROAE médio...",
+    "routed_path": "analytics",
+    "reasoning_steps": ["Validated query scope (score: 82/100)", "Generated and executed SQL (50 rows returned)", "Generated answer from context"],
+    "sql": "SELECT segmento, AVG(roae)...",
+    "masked_fields": ["cliente_id"],
+    "latency_ms": 1240
+  }
 }
 ```
 

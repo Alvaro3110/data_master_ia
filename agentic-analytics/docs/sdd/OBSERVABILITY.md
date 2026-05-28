@@ -1,15 +1,24 @@
 # Objetivo
-Garantir rastreabilidade end-to-end de requisições, decisões dos agentes e eventos críticos.
+Definir rastreabilidade ponta a ponta para diagnóstico rápido, auditoria de decisões e medição de qualidade operacional.
 
 ## Trace ID
-- Cada request recebe um `trace_id` no middleware.
-- `trace_id` é retornado no header `X-Trace-ID` e no corpo JSON envelope.
-- Eventos SSE devem incluir `trace_id` no evento de conclusão.
+- Middleware injeta `trace_id` em toda request.
+- `trace_id` retorna no header `X-Trace-ID` e no envelope JSON.
+- Se cliente enviar `X-Trace-ID` inválido, servidor gera novo UUID.
+- SSE deve concluir com evento `done` contendo `trace_id`.
 
 ## Logs Estruturados
-- Preferir logs estruturados para eventos críticos de segurança, SQL e latência.
-- Registrar status de execução do fluxo agentic e nós percorridos.
+- Logs em JSON com `timestamp`, `level`, `trace_id`, `endpoint`, `status_code`.
+- Em caso de erro, registrar causa técnica e contexto mínimo sem expor PII.
+- Eventos críticos: bloqueio SQL, falha de dependência, fallback de provedor, timeout.
 
 ## Métricas
-- Monitorar latência e taxa de erro de endpoints críticos (`/health`, `/ask-analytics`).
-- Acompanhar falhas de validação SQL e degradação de dependências externas.
+- Latência p50/p95 de `/api/v1/health` e `/api/v1/ask-analytics`.
+- Taxa de erro por endpoint (4xx e 5xx).
+- Taxa de bloqueio de segurança (SQL validator, guardrail, rate-limit).
+- Throughput de eventos SSE por `trace_id` para análise de streaming.
+
+## Alertas Operacionais
+- Alerta para aumento súbito de erro (`5xx`) ou latência acima do SLO.
+- Alerta de dependência degradada (Postgres/Redis/OpenSearch).
+- Alerta de regressão de contrato detectada por validações SDD em CI.

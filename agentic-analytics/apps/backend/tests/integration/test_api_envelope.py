@@ -1,4 +1,5 @@
 import pytest
+import uuid
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
@@ -76,3 +77,23 @@ async def test_traces_not_found_still_returns_envelope(client):
     assert response.status_code == 404
     data = assert_envelope(response.json())
     assert "detail" in data
+
+
+@pytest.mark.asyncio
+async def test_root_reuses_valid_x_trace_id_header(client):
+    provided_trace_id = str(uuid.uuid4())
+    response = await client.get("/", headers={"X-Trace-ID": provided_trace_id})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trace_id"] == provided_trace_id
+    assert response.headers.get("x-trace-id") == provided_trace_id
+
+
+@pytest.mark.asyncio
+async def test_root_replaces_invalid_x_trace_id_header(client):
+    response = await client.get("/", headers={"X-Trace-ID": "not-a-uuid"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trace_id"] != "not-a-uuid"
+    assert response.headers.get("x-trace-id") == payload["trace_id"]
+    uuid.UUID(payload["trace_id"])

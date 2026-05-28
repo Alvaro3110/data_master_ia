@@ -1,20 +1,26 @@
 # Copilot Instructions
 
 ## Objetivo
-Padronizar contribuições assistidas por IA no repositório com foco em SDD, TDD, segurança e rastreabilidade.
+Padronizar contribuições assistidas por IA com foco em SDD, TDD e contrato público estável.
 
 ## Fluxo Obrigatório
-1. Ler `agentic-analytics/docs/sdd/` antes de propor código.
-2. Confirmar critérios de aceite em `ACCEPTANCE_CRITERIA.md` e tarefas em `TASKS.md`.
-3. Implementar com testes claros e determinísticos.
-4. Atualizar specs e contratos quando houver mudança de comportamento.
-5. Não concluir tarefa com CI quebrado.
+1. Ler `agentic-analytics/docs/sdd/` antes de escrever código.
+2. Confirmar `TASKS.md` e `ACCEPTANCE_CRITERIA.md` para mapear o slice ativo.
+3. Implementar mudanças pequenas e testáveis; evitar escopo extra.
+4. Atualizar `docs/sdd/**` no mesmo PR quando `apps/**` mudar comportamento.
+5. Encerrar somente com validações locais e CI verdes.
 
 ## Regras de Qualidade
-- Toda resposta HTTP JSON deve seguir envelope `{trace_id, data}`.
-- Consultas SQL geradas por agentes devem passar por validação AST.
-- Evitar chamadas LLM reais em testes de PR; usar mocks.
-- Priorizar mudanças pequenas e verificáveis por slice vertical.
+- Toda resposta HTTP JSON usa envelope `{trace_id, data}`.
+- `X-Trace-ID` só é aceito se UUID válido.
+- SQL gerado por agentes deve passar por validação AST (`sqlglot`).
+- Em PR, evitar chamadas reais de LLM; usar mocks/fallback.
+- Não alterar arquivos fora do escopo sem necessidade explícita.
+
+## Regras de Teste
+- `pytest` para backend e governança SDD.
+- `playwright` para E2E com mocks de envelope e SSE.
+- Testes `@pytest.mark.live_openai` fora do gate padrão de PR.
 
 ## Comandos Úteis
 - `python agentic-analytics/scripts/validate_sdd.py`

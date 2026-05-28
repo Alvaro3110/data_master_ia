@@ -1,30 +1,32 @@
 # Mission
-Manter o `agentic-analytics` alinhado a desenvolvimento orientado por especificação, com qualidade verificável e segurança por padrão.
+Entregar evolução contínua do `agentic-analytics` com Spec-Driven Development, preservando contratos públicos, segurança e rastreabilidade em cada mudança.
 
 ## Responsibilities
 ### Spec Architect
-- Editar e manter `docs/sdd/*` como fonte de verdade funcional e técnica.
-- Definir critérios de aceite testáveis e atualizar contratos antes de mudanças de código.
-- Registrar decisões, riscos e pendências em specs rastreáveis.
+- Manter `docs/sdd/*` como fonte de verdade para requisitos funcionais e não funcionais.
+- Atualizar critérios de aceite e contratos antes de aprovar mudança de comportamento.
+- Registrar riscos, dúvidas e decisões em `QUESTIONS.md` e documentos correlatos.
 
 ### Software Engineer
-- Implementar mudanças somente a partir das specs aprovadas.
-- Garantir TDD para comportamento crítico e contratos públicos.
-- Atualizar testes e documentação quando houver alteração de API, dados ou segurança.
+- Ler `docs/sdd` antes de codificar.
+- Implementar apenas o que estiver coberto por critérios de aceite observáveis.
+- Entregar código + teste + atualização de spec no mesmo PR quando houver impacto de contrato.
 
 ### Reviewer
-- Validar aderência a specs, cobertura de critérios de aceite e impactos de regressão.
-- Bloquear merge quando houver divergência entre implementação e SDD.
+- Validar aderência entre código e spec.
+- Confirmar que CI de contrato (`validate_sdd`, `test_sdd_*`) está verde.
+- Bloquear merge quando houver divergência entre `apps/**` e `docs/sdd/**`.
 
 ## Constraints
-- Ler `docs/sdd` antes de iniciar qualquer codificação.
-- Não introduzir requisito novo sem atualização explícita de spec.
-- Não usar OpenAI real em testes de PR sem marcação `live_openai`.
-- Não liberar código sem critérios de aceite observáveis.
+- Não alterar arquivos fora do escopo da task em andamento.
+- Não introduzir requisito novo sem atualização explícita de `docs/sdd`.
+- Não usar OpenAI real em PR sem `@pytest.mark.live_openai` e contexto controlado.
+- Não aceitar resposta JSON fora do envelope `{trace_id, data}`.
 
 ## Workflow
-1. Revisar specs relevantes em `docs/sdd`.
-2. Ajustar ou criar testes para o comportamento esperado.
+1. Revisar specs relevantes em `docs/sdd` (PRD, SPEC, TASKS, AC).
+2. Escrever/ajustar testes para o comportamento esperado.
 3. Implementar o mínimo necessário para verde.
-4. Executar validações locais (`validate_sdd`, `pytest`, lint aplicável).
-5. Atualizar specs afetadas no mesmo PR.
+4. Executar validações locais (`validate_sdd`, `pytest`, lint).
+5. Revisar impacto de contrato e atualizar docs no mesmo PR.
+6. Só avançar para próximo slice após fechamento de critérios do slice atual.

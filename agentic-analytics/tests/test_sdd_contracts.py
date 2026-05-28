@@ -38,7 +38,17 @@ def test_vs_references_existing_acceptance_ids() -> None:
 def test_test_plan_mentions_live_openai_policy() -> None:
     text = (SDD_DIR / "TEST_PLAN.md").read_text(encoding="utf-8")
     assert "live_openai" in text
-    assert "não podem chamar OpenAI real" in text or "não podem" in text
+    assert "playwright" in text.lower()
+    lowered = text.lower()
+    assert "openai real" in lowered
+    assert ("não" in lowered) or ("proibido" in lowered)
+
+
+def test_api_contracts_has_json_examples_with_envelope() -> None:
+    text = (SDD_DIR / "API_CONTRACTS.md").read_text(encoding="utf-8")
+    assert text.lower().count("```json") >= 2
+    assert '"trace_id"' in text
+    assert '"data"' in text
 
 
 def test_workflow_has_expected_validation_steps() -> None:
@@ -62,3 +72,14 @@ def test_diff_gate_passes_when_apps_and_sdd_change() -> None:
         "agentic-analytics/docs/sdd/SPEC.md",
     ])
     assert not errors
+
+
+def test_diff_gate_fail_closed_when_diff_unresolved(monkeypatch) -> None:
+    mod = _load_validator_module()
+
+    def _fake_run_git_diff(diff_range=None):
+        return [], False
+
+    monkeypatch.setattr(mod, "_run_git_diff", _fake_run_git_diff)
+    errors = mod.validate(check_diff=True)
+    assert any(err.startswith("DIFF_GATE_UNRESOLVED") for err in errors)

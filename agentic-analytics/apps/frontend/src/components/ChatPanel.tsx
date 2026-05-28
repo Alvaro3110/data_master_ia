@@ -41,7 +41,7 @@ function unwrapData<T>(payload: unknown): T {
   ) {
     return (payload as { data: T }).data;
   }
-  return payload as T;
+  throw new Error("Contrato inválido: envelope {trace_id, data} ausente.");
 }
 
 export function ChatPanel({ apiUrl, workspaceId }: ChatPanelProps) {

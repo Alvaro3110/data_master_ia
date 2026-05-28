@@ -1,23 +1,31 @@
 # Objetivo
-Definir estratégia de testes para desenvolvimento orientado a especificação, com foco em segurança, contrato e previsibilidade.
+Definir estratégia de teste orientada a contrato para garantir que mudanças de código não quebrem especificações SDD, segurança e rastreabilidade.
 
 ## Estratégia de Testes
-- Backend unitário e integração com `pytest`.
-- Frontend unitário com Jest/RTL e E2E opcional com Playwright.
-- Testes SDD em `agentic-analytics/tests/test_sdd_*.py` para governança de documentação.
+- `pytest` para testes unitários, integração e governança SDD.
+- `playwright` para E2E frontend com mocks controlados de API/SSE.
+- Jest/RTL para comportamento de componentes críticos (`WorkspaceSidebar`, `ChatPanel`).
+- Separação de escopo: contrato e segurança são validados em PR; testes pesados podem rodar em jobs dedicados.
 
 ## Política de Mocks
-- Testes de PR não podem chamar OpenAI real.
-- Integrações com LLM devem usar mocks determinísticos ou fallback local (Ollama).
-- Chamadas reais só são permitidas em testes marcados com `@pytest.mark.live_openai` em ambientes controlados.
+- Em PR, é proibido chamar OpenAI real nas suítes padrão.
+- Fluxos de LLM devem usar mocks determinísticos ou fallback local (Ollama).
+- Chamadas reais só em testes explicitamente marcados com `@pytest.mark.live_openai`.
+- Testes `live_openai` ficam fora do gate padrão de PR e rodam manualmente ou em janela noturna.
+
+## Política de Infra de Banco
+- CI backend usa `POSTGRES_URL` com serviço PostgreSQL disponível.
+- Ambiente local usa `TEST_DB_MODE=auto` para fallback SQLite quando Postgres não estiver disponível.
+- `TEST_DB_MODE=postgres` falha de forma explícita se conexão não for possível.
 
 ## Critérios de Aprovação
-- `python agentic-analytics/scripts/validate_sdd.py` com exit code 0.
-- `pytest -q agentic-analytics/tests/test_sdd_*.py` passando.
-- Suítes backend/frontend críticas sem regressão de contrato.
-- Workflow `sdd-validation` verde em PR.
+- `python agentic-analytics/scripts/validate_sdd.py` retorna `exit 0`.
+- `python agentic-analytics/scripts/validate_sdd.py --check-diff` retorna `exit 0` em mudanças válidas.
+- `pytest -q agentic-analytics/tests/test_sdd_*.py` passa integralmente.
+- Testes de contrato backend para envelope e `trace_id` passam.
+- Testes frontend alvo de parsing de envelope passam.
 
 ## Evidências Esperadas
-- Log de execução do validador SDD.
-- Saída do pytest da suíte SDD.
-- Registro de atualização dos contratos em `docs/sdd` no mesmo PR de mudanças de código.
+- Log do validador SDD e da suíte `test_sdd_*` anexado ao PR.
+- Saída dos testes backend/frontend alterados na entrega.
+- Referências cruzadas entre mudanças em `apps/**` e updates em `docs/sdd/**`.

@@ -17,6 +17,16 @@ from app.config import settings
 from app.db.session import init_db
 
 
+def _resolve_trace_id(raw_trace_id: str | None) -> str:
+    """Aceita trace recebido apenas se for UUID válido; caso contrário, gera novo."""
+    if not raw_trace_id:
+        return str(uuid.uuid4())
+    try:
+        return str(uuid.UUID(raw_trace_id.strip()))
+    except (ValueError, AttributeError):
+        return str(uuid.uuid4())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
@@ -53,7 +63,7 @@ app.add_middleware(
 @app.middleware("http")
 async def inject_trace_id(request: Request, call_next):
     """Injeta trace_id em toda request e adiciona ao response header."""
-    trace_id = request.headers.get("X-Trace-ID", str(uuid.uuid4()))
+    trace_id = _resolve_trace_id(request.headers.get("X-Trace-ID"))
     request.state.trace_id = trace_id
     response = await call_next(request)
     response.headers["X-Trace-ID"] = trace_id

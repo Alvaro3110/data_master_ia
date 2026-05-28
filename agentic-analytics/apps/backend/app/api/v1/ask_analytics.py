@@ -51,7 +51,12 @@ class AskResponse(BaseModel):
     status: str = "success"
 
 
-@router.post("/ask-analytics")
+class AskEnvelopeResponse(BaseModel):
+    trace_id: str
+    data: AskResponse
+
+
+@router.post("/ask-analytics", response_model=AskEnvelopeResponse)
 async def ask_analytics(
     body: AskRequest,
     request: Request,

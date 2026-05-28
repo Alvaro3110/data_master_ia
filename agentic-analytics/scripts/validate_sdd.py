@@ -22,7 +22,7 @@ REQUIRED_DOCS: dict[str, list[str]] = {
     "ARCHITECTURE.md": ["# Objetivo", "## Diagrama de Alto Nível", "```mermaid"],
     "API_CONTRACTS.md": ["# Objetivo", "## Envelope Padrão", "trace_id"],
     "DATA_CONTRACTS.md": ["# Objetivo", "## Workspace", "## Política de PII"],
-    "SECURITY.md": ["# Objetivo", "## Validador SQL", "## Segredos e Custos LLM"],
+    "SECURITY.md": ["# Objetivo", "## Validador SQL", "## Segredos e Configuração"],
     "OBSERVABILITY.md": ["# Objetivo", "## Trace ID", "## Métricas"],
     "PHASE_3_PLAN.md": ["# Objetivo", "## Evolução Proposta"],
     "QUESTIONS.md": ["# Objetivo", "## Questões em Aberto"],
@@ -38,6 +38,15 @@ PLACEHOLDER_RE = re.compile(r"\b(TODO|TBD|lorem ipsum)\b|<\.\.\.>", re.IGNORECAS
 TASK_RE = re.compile(r"^- \[ \] VS\d{2}: .+ - Critério de aceite: .+$")
 AC_RE = re.compile(r"^- AC\d{2}: .+$")
 QUESTION_RE = re.compile(r"^- Q\d{2}: .+$")
+JSON_BLOCK_RE = re.compile(r"```json", re.IGNORECASE)
+ZERO_SHA = "0000000000000000000000000000000000000000"
+
+SEMANTIC_REQUIREMENTS: dict[Path, list[str]] = {
+    SDD_DIR / "TEST_PLAN.md": ["pytest", "playwright", "live_openai"],
+    SDD_DIR / "SECURITY.md": ["sqlglot", "CORS", "rate-limit"],
+    SDD_DIR / "OBSERVABILITY.md": ["trace_id", "latência", "erro"],
+    PROJECT_ROOT / "AGENTS.md": ["Não alterar arquivos fora do escopo", "docs/sdd"],
+}
 
 
 def _read(path: Path) -> str:
@@ -116,7 +125,33 @@ def _validate_architecture(errors: list[str]) -> None:
         errors.append("ARCHITECTURE_FORMAT: ARCHITECTURE.md sem bloco mermaid")
 
 
-def _run_git_diff(diff_range: str | None = None) -> list[str]:
+def _validate_api_contracts(errors: list[str]) -> None:
+    path = SDD_DIR / "API_CONTRACTS.md"
+    if not path.exists():
+        return
+    content = _read(path)
+    json_blocks = len(JSON_BLOCK_RE.findall(content))
+    if json_blocks < 2:
+        errors.append("API_CONTRACTS_FORMAT: esperado no mínimo 2 exemplos JSON em API_CONTRACTS.md")
+    lowered = content.lower()
+    if '"trace_id"' not in lowered or '"data"' not in lowered:
+        errors.append("API_CONTRACTS_FORMAT: exemplos JSON devem explicitar campos trace_id e data")
+
+
+def _validate_semantics(errors: list[str]) -> None:
+    for path, snippets in SEMANTIC_REQUIREMENTS.items():
+        if not path.exists():
+            continue
+        content = _read(path).lower()
+        for snippet in snippets:
+            if snippet.lower() not in content:
+                errors.append(f"SEMANTIC_MISSING: {path} -> {snippet}")
+
+
+def _run_git_diff(diff_range: str | None = None) -> tuple[list[str], bool]:
+    if diff_range and ZERO_SHA in diff_range:
+        diff_range = None
+
     cmd: list[str]
     if diff_range:
         cmd = ["git", "diff", "--name-only", diff_range]
@@ -130,19 +165,20 @@ def _run_git_diff(diff_range: str | None = None) -> list[str]:
         else:
             cmd = ["git", "diff", "--name-only", "HEAD~1..HEAD"]
 
-    try:
-        output = subprocess.check_output(cmd, cwd=PROJECT_ROOT.parent, text=True)
-        files = [line.strip() for line in output.splitlines() if line.strip()]
-        if files:
-            return files
-    except Exception:
-        pass
+    commands = [
+        cmd,
+        ["git", "diff", "--name-only"],
+    ]
 
-    try:
-        output = subprocess.check_output(["git", "diff", "--name-only"], cwd=PROJECT_ROOT.parent, text=True)
-        return [line.strip() for line in output.splitlines() if line.strip()]
-    except Exception:
-        return []
+    for diff_cmd in commands:
+        try:
+            output = subprocess.check_output(diff_cmd, cwd=PROJECT_ROOT.parent, text=True)
+            files = [line.strip() for line in output.splitlines() if line.strip()]
+            return files, True
+        except Exception:
+            continue
+
+    return [], False
 
 
 def check_diff_gate(changed_files: list[str]) -> list[str]:
@@ -172,9 +208,15 @@ def validate(check_diff: bool = False, diff_range: str | None = None) -> list[st
     _validate_acceptance(errors)
     _validate_questions(errors)
     _validate_architecture(errors)
+    _validate_api_contracts(errors)
+    _validate_semantics(errors)
 
     if check_diff:
-        changed_files = _run_git_diff(diff_range=diff_range)
+        changed_files, diff_resolved = _run_git_diff(diff_range=diff_range)
+        if not diff_resolved:
+            errors.append("DIFF_GATE_UNRESOLVED: não foi possível calcular git diff com segurança")
+        elif os.getenv("CI", "").lower() == "true" and not changed_files:
+            errors.append("DIFF_GATE_UNRESOLVED: git diff vazio em CI; impossível validar gate de contrato")
         errors.extend(check_diff_gate(changed_files))
 
     return errors

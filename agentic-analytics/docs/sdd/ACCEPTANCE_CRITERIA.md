@@ -1,24 +1,31 @@
 # Objetivo
-Definir critérios de aceite objetivos e testáveis para validação automática da disciplina SDD.
+Definir critérios de aceite objetivos para que CI e revisão técnica validem conformidade SDD sem ambiguidade.
 
 ## Critérios de Aceite
-- AC01: Todos os arquivos obrigatórios de `docs/sdd` existem.
-- AC02: Cada arquivo obrigatório possui conteúdo não vazio e cabeçalhos Markdown válidos.
-- AC03: `PRD.md` inclui objetivo, contexto de negócio, público-alvo, casos de uso e escopo.
-- AC04: `SPEC.md` inclui stack, arquitetura, fluxos e restrições não funcionais.
-- AC05: `TASKS.md` usa o padrão `- [ ] VSxx: ... - Critério de aceite: ...`.
-- AC06: `ACCEPTANCE_CRITERIA.md` usa o padrão `- ACxx: ...`.
-- AC07: `ARCHITECTURE.md` contém ao menos um bloco Mermaid válido.
-- AC08: Não há placeholders proibidos (marcadores de pendência ou textos genéricos) nos arquivos SDD.
-- AC09: `validate_sdd.py --check-diff` falha quando há mudança em `agentic-analytics/apps/**` sem mudança em `agentic-analytics/docs/sdd/**`.
-- AC10: `validate_sdd.py --check-diff` passa quando há mudança em `apps/**` e em `docs/sdd/**` no mesmo diff.
-- AC11: Workflow `sdd-validation.yml` roda em `push` para `main` e `pull_request`.
-- AC12: Workflow executa validador SDD, pytest de SDD e markdownlint.
-- AC13: Endpoint `/api/v1/health` responde com `{trace_id, data}` e `data.status`.
-- AC14: Endpoint `/api/v1/ask-analytics` responde com `{trace_id, data}` e `data.answer`.
-- AC15: Endpoints de workspaces e traces retornam envelope com `trace_id`.
-- AC16: Frontend consome `response.data` para listas de workspaces, threads e trace inicial de stream.
-- AC17: `API_CONTRACTS.md` documenta envelope padrão em todos endpoints HTTP JSON.
-- AC18: `TEST_PLAN.md` formaliza política de `@pytest.mark.live_openai` para chamadas reais.
-- AC19: `AGENTS.md` contém seções `Mission`, `Responsibilities`, `Constraints`, `Workflow`.
-- AC20: `.github/copilot-instructions.md` exige leitura de `docs/sdd` antes de codar.
+- AC01: Todos os arquivos obrigatórios de `docs/sdd/` existem e são não vazios.
+- AC02: Cada documento obrigatório contém H1 e snippets mandatórios definidos em `validate_sdd.py`.
+- AC03: Não há marcadores de pendência ou texto fictício proibido nos arquivos SDD.
+- AC04: `TASKS.md` possui itens no formato `- [ ] VSxx: ... - Critério de aceite: ...`.
+- AC05: `ACCEPTANCE_CRITERIA.md` possui itens no formato `- ACxx: ...`.
+- AC06: `QUESTIONS.md` possui itens no formato `- Qxx: ...`.
+- AC07: `ARCHITECTURE.md` contém ao menos um bloco Mermaid.
+- AC08: `API_CONTRACTS.md` contém no mínimo 2 blocos `json` com `trace_id` e `data`.
+- AC09: `TEST_PLAN.md` contém política explícita de `pytest`.
+- AC10: `TEST_PLAN.md` contém política explícita de `playwright`.
+- AC11: `TEST_PLAN.md` contém política explícita de `live_openai` para chamadas reais.
+- AC12: `validate_sdd.py --check-diff` falha quando `apps/**` muda sem `docs/sdd/**`.
+- AC13: `validate_sdd.py --check-diff` falha com `DIFF_GATE_UNRESOLVED` quando diff não é determinável em CI.
+- AC14: `.github/workflows/ci.yml` usa `POSTGRES_URL` compatível com `config.py` e não `DATABASE_URL`.
+- AC15: `GET /` retorna HTTP 200 com envelope `{trace_id, data}`.
+- AC16: Se `X-Trace-ID` enviado for UUID válido, backend reutiliza o valor em header e payload.
+- AC17: Se `X-Trace-ID` enviado for inválido, backend gera novo UUID e não propaga o valor inválido.
+- AC18: `GET /api/v1/health` retorna HTTP 200 com `data.status` e `trace_id`.
+- AC19: `POST /api/v1/ask-analytics` retorna HTTP 200 em envelope com `data.answer` e `data.routed_path`.
+- AC20: `/api/v1/workspaces*`, `/api/v1/traces/{trace_id}` e `/api/v1/search-rules` retornam envelope padronizado.
+- AC21: Frontend (`WorkspaceSidebar`, `ChatPanel`) consome apenas `response.data`; mock E2E segue envelope canônico.
+- AC22: `SECURITY.md` descreve guardrails SQL via `sqlglot`, PII masking, CORS restrito e rate-limit.
+- AC23: `OBSERVABILITY.md` descreve `trace_id`, logs estruturados e métricas de latência/erro.
+- AC24: SSE `GET /ask-analytics/stream/{trace_id}` mantém stream e evento `done` com `trace_id`.
+- AC25: `AGENTS.md` contém `Mission`, `Responsibilities`, `Constraints`, `Workflow`.
+- AC26: `AGENTS.md` explicita regra: "Não alterar arquivos fora do escopo da task".
+- AC27: `.github/copilot-instructions.md` exige leitura de `docs/sdd` antes de codar e atualização de specs no mesmo PR.

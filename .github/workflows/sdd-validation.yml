@@ -9,15 +9,17 @@ on:
 jobs:
   sdd-validation:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -27,15 +29,24 @@ jobs:
           pip install pytest
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install markdownlint
         run: npm install -g markdownlint-cli
 
-      - name: Validate SDD structure
-        run: python agentic-analytics/scripts/validate_sdd.py --check-diff
+      - name: Validate SDD structure (pull_request)
+        if: github.event_name == 'pull_request'
+        run: >
+          python agentic-analytics/scripts/validate_sdd.py --check-diff
+          --diff-range "${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
+
+      - name: Validate SDD structure (push)
+        if: github.event_name == 'push'
+        run: >
+          python agentic-analytics/scripts/validate_sdd.py --check-diff
+          --diff-range "${{ github.event.before }}..${{ github.sha }}"
 
       - name: Run SDD tests
         run: pytest -q agentic-analytics/tests/test_sdd_*.py

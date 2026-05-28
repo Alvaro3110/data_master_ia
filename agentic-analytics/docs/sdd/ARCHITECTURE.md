@@ -1,50 +1,73 @@
 # Objetivo
-Registrar a arquitetura de referência com foco em rastreabilidade e governança para desenvolvimento guiado por especificação.
+Documentar o fluxo técnico completo da plataforma para reduzir ambiguidade entre camadas e orientar evolução controlada.
 
 ## Diagrama de Alto Nível
 ```mermaid
 flowchart LR
   subgraph Frontend
     FE[Next.js App]
+    UI1[WorkspaceSidebar]
+    UI2[ChatPanel]
   end
 
-  subgraph Backend
-    API[FastAPI API]
-    WS[Workspace Endpoints]
-    ASK[Ask Analytics]
-    SSE[SSE Stream]
+  subgraph API
+    BE[FastAPI API]
+    MW[Trace Middleware]
+    WS[Workspaces API]
+    ASK[POST /ask-analytics]
+    STREAM_START[POST /ask-analytics/stream]
+    STREAM_GET[GET /ask-analytics/stream/{trace_id}]
   end
 
   subgraph Agentic
     GR[Guardrail]
     SUP[Supervisor]
-    SQL[Text2SQL Agent]
-    RAG[RAG Agent]
+    SQLA[SQL Agent]
+    RAGA[RAG Agent]
   end
 
   subgraph Data
     PG[(PostgreSQL)]
     DK[(DuckDB)]
-    RS[(Redis)]
     OS[(OpenSearch)]
+    RD[(Redis Streams)]
   end
 
-  FE --> API
-  API --> WS
-  API --> ASK
+  FE --> BE
+  UI1 --> WS
+  UI2 --> ASK
+  UI2 --> STREAM_START
+  UI2 --> STREAM_GET
+
+  BE --> MW
+  MW --> WS
+  MW --> ASK
+  MW --> STREAM_START
+
   ASK --> GR
   GR --> SUP
-  SUP --> SQL
-  SUP --> RAG
-  SQL --> DK
-  SQL --> PG
-  RAG --> OS
-  API --> SSE
-  SSE --> RS
+  SUP --> SQLA
+  SUP --> RAGA
+
+  SQLA --> DK
+  SQLA --> PG
+  RAGA --> OS
+
+  STREAM_START --> RD
+  STREAM_GET --> RD
 ```
 
-## Legenda
-- Frontend consome endpoints REST e canal SSE.
-- Backend injeta `trace_id` por request e o propaga no payload JSON.
-- Orquestração usa guardrails e roteamento por intenção.
-- Camadas de dados permanecem protegidas por validações de segurança e políticas de mascaramento.
+## Fluxo de Resposta
+- Endpoints HTTP JSON respondem no envelope `{trace_id, data}`.
+- `trace_id` é propagado em header `X-Trace-ID` e no corpo.
+- SSE mantém stream textual, com evento `done` contendo `trace_id` para correlação final.
+
+## Fronteiras de Segurança
+- SQL só executa após validação AST.
+- Dados sensíveis passam por mascaramento antes de retorno e auditoria.
+- CORS restrito por origem controlada.
+
+## Pontos de Escalabilidade
+- Redis stream suporta replay por `last_event_id`.
+- Especialistas LangGraph podem ser adicionados sem quebrar contrato HTTP.
+- Contratos de API e dados são versionados em `docs/sdd`.

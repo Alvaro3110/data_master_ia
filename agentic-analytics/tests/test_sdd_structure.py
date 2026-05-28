@@ -51,6 +51,18 @@ def test_tasks_follow_vs_format() -> None:
     assert not invalid, f"Linhas VS inválidas: {invalid}"
 
 
+def test_questions_follow_q_format() -> None:
+    lines = [
+        line.strip()
+        for line in (SDD_DIR / "QUESTIONS.md").read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("- Q")
+    ]
+    assert lines, "QUESTIONS.md deve ter ao menos um item Q"
+    pattern = re.compile(r"^- Q\d{2}: .+$")
+    invalid = [line for line in lines if not pattern.match(line)]
+    assert not invalid, f"Linhas Q inválidas: {invalid}"
+
+
 def test_validator_cli_passes_default_mode() -> None:
     proc = subprocess.run(
         [sys.executable, str(VALIDATOR)],
