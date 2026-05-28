@@ -1,7 +1,9 @@
 # Objetivo
+
 Documentar o fluxo técnico completo da plataforma para reduzir ambiguidade entre camadas e orientar evolução controlada.
 
 ## Diagrama de Alto Nível
+
 ```mermaid
 flowchart LR
   subgraph Frontend
@@ -55,19 +57,23 @@ flowchart LR
 
   STREAM_START --> RD
   STREAM_GET --> RD
+
 ```
 
 ## Fluxo de Resposta
+
 - Endpoints HTTP JSON respondem no envelope `{trace_id, data}`.
 - `trace_id` é propagado em header `X-Trace-ID` e no corpo.
 - SSE mantém stream textual, com evento `done` contendo `trace_id` para correlação final.
 
 ## Fronteiras de Segurança
+
 - SQL só executa após validação AST.
 - Dados sensíveis passam por mascaramento antes de retorno e auditoria.
 - CORS restrito por origem controlada.
 
 ## Pontos de Escalabilidade
+
 - Redis stream suporta replay por `last_event_id`.
 - Especialistas LangGraph podem ser adicionados sem quebrar contrato HTTP.
 - Contratos de API e dados são versionados em `docs/sdd`.

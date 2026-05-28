@@ -1,7 +1,9 @@
 # Objetivo
+
 Definir critérios de aceite objetivos para que CI e revisão técnica validem conformidade SDD sem ambiguidade.
 
 ## Critérios de Aceite
+
 - AC01: Todos os arquivos obrigatórios de `docs/sdd/` existem e são não vazios.
 - AC02: Cada documento obrigatório contém H1 e snippets mandatórios definidos em `validate_sdd.py`.
 - AC03: Não há marcadores de pendência ou texto fictício proibido nos arquivos SDD.
